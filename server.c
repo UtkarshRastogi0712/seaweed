@@ -5,7 +5,6 @@
 #include <string.h>
 #include <winnt.h>
 
-
 #pragma comment(lib, "ws2_32.lib")
 
 int main() {
@@ -13,10 +12,20 @@ int main() {
   int socket_descriptor, client_socket, client_size;
   struct sockaddr_in server_addr, client_addr;
   char server_buffer[1000], client_buffer[1000];
-  strcpy_s(server_buffer, sizeof("Hello World"), "Hello World");
 
   memset(server_buffer, '\0', sizeof(server_buffer));
   memset(client_buffer, '\0', sizeof(client_buffer));
+
+  strcpy(server_buffer, "HTTP/1.1 200 OK\r\n"
+                        "Connection: Close\r\n"
+                        "Content-Type: text/html\r\n"
+                        "Content-Length: 48\r\n"
+                        "Date: Wed, 20 Jul 2016 10:55:30 GMT\r\n"
+                        "Last-Modified: Tue, 19 Jul 2016 00:59:33 GMT\r\n"
+                        "Server: Apache\r\n"
+                        "\r\n"
+                        "<html><body><h1>Hello World!</h1></body></html>");
+
   if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
     printf("Cant init wsa");
     return 0;
@@ -50,9 +59,9 @@ int main() {
   }
 
   client_size = sizeof(client_addr);
-  while ((client_socket =
-              accept(socket_descriptor, (struct sockaddr *)&client_addr,
-                     &client_size)) >= 0) {
+  while (1) {
+    client_socket = accept(socket_descriptor, (struct sockaddr *)&client_addr,
+                           &client_size);
 
     if (client_socket < 0) {
       printf("Cant accept");
@@ -61,14 +70,14 @@ int main() {
       return 0;
     }
 
-    if (recv(client_socket, client_buffer, sizeof(client_buffer), 0) < 0) {
+    if (recv(client_socket, client_buffer, strlen(client_buffer), 0) < 0) {
       printf("Cant recieve");
       closesocket(socket_descriptor);
       WSACleanup();
       return 0;
     }
 
-    if (send(client_socket, server_buffer, sizeof(server_buffer), 0) < 0) {
+    if (send(client_socket, server_buffer, strlen(server_buffer), 0) < 0) {
       printf("Cant send");
       closesocket(socket_descriptor);
       WSACleanup();
