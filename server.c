@@ -51,11 +51,7 @@ http_server create_server(int port) {
   return server;
 }
 
-void start_server() {}
-
-int main() {
-  http_server app;
-  app = create_server(3000);
+void start_server(http_server server) {
 
   int client_socket, client_size;
   struct sockaddr_in client_addr;
@@ -71,42 +67,54 @@ int main() {
                         "\r\n"
                         "<html><body><h1>Hello World!</h1></body></html>");
 
-  if (listen(app.server_socket, 1) < 0) {
+  if (listen(server.server_socket, 1) < 0) {
     printf("Error while listening");
-    closesocket(app.server_socket);
+    closesocket(server.server_socket);
     WSACleanup();
-    return 0;
+    return;
   }
 
   client_size = sizeof(client_addr);
   while (1) {
-    client_socket = accept(app.server_socket, (struct sockaddr *)&client_addr,
-                           &client_size);
+    client_socket = accept(server.server_socket,
+                           (struct sockaddr *)&client_addr, &client_size);
 
     if (client_socket < 0) {
       printf("Cant accept");
       closesocket(client_socket);
       WSACleanup();
-      return 0;
+      return;
     }
 
     if (recv(client_socket, client_buffer, strlen(client_buffer), 0) < 0) {
       printf("Cant recieve");
       closesocket(client_socket);
       WSACleanup();
-      return 0;
+      return;
     }
 
     if (send(client_socket, server_buffer, strlen(server_buffer), 0) < 0) {
       printf("Cant send");
       closesocket(client_socket);
       WSACleanup();
-      return 0;
+      return;
     }
 
     printf("Message: %s\n", client_buffer);
   }
-  closesocket(app.server_socket);
+}
+
+void close_server(http_server *server) {
+  closesocket(server->server_socket);
   WSACleanup();
+}
+
+int main() {
+  http_server app;
+
+  app = create_server(3000);
+  start_server(app);
+  close_server(&app);
+
   return 0;
 }
