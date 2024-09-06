@@ -45,9 +45,17 @@ int create_server_socket(int port) {
   return socket_descriptor;
 }
 
+http_server create_server(int port) {
+  http_server server;
+  server.server_socket = create_server_socket(port);
+  return server;
+}
+
+void start_server() {}
+
 int main() {
   http_server app;
-  app.server_socket = create_server_socket(3000);
+  app = create_server(3000);
 
   int client_socket, client_size;
   struct sockaddr_in client_addr;
