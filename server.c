@@ -8,7 +8,11 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-int create_socket(int port) {
+typedef struct http_server {
+  int server_socket;
+} http_server;
+
+int create_server_socket(int port) {
   WSADATA wsa;
   int socket_descriptor;
   struct sockaddr_in server_addr;
@@ -42,7 +46,8 @@ int create_socket(int port) {
 }
 
 int main() {
-  int socket_descriptor = create_socket(3000);
+  http_server app;
+  app.server_socket = create_server_socket(3000);
 
   int client_socket, client_size;
   struct sockaddr_in client_addr;
@@ -58,16 +63,16 @@ int main() {
                         "\r\n"
                         "<html><body><h1>Hello World!</h1></body></html>");
 
-  if (listen(socket_descriptor, 1) < 0) {
+  if (listen(app.server_socket, 1) < 0) {
     printf("Error while listening");
-    closesocket(socket_descriptor);
+    closesocket(app.server_socket);
     WSACleanup();
     return 0;
   }
 
   client_size = sizeof(client_addr);
   while (1) {
-    client_socket = accept(socket_descriptor, (struct sockaddr *)&client_addr,
+    client_socket = accept(app.server_socket, (struct sockaddr *)&client_addr,
                            &client_size);
 
     if (client_socket < 0) {
@@ -93,7 +98,7 @@ int main() {
 
     printf("Message: %s\n", client_buffer);
   }
-  closesocket(socket_descriptor);
+  closesocket(app.server_socket);
   WSACleanup();
   return 0;
 }
