@@ -51,6 +51,48 @@ http_server create_server(int port) {
   return server;
 }
 
+void send_response(int response_code, char *body, int length,
+                   int content_type_code) {
+  char response[1024] = "";
+  char *response_code_text;
+  char *content_type;
+
+  switch (response_code) {
+  case 200:
+    response_code_text = "OK";
+    break;
+  case 404:
+    response_code_text = "Not Found";
+    break;
+  case 500:
+    response_code_text = "Internal Server Error";
+    break;
+  }
+
+  switch (content_type_code) {
+  case 0:
+    content_type = "text/plain";
+    break;
+  case 1:
+    content_type = "text/html";
+    break;
+  case 2:
+    content_type = "application/json";
+    break;
+  }
+
+  snprintf(response, 1024,
+           "HTTP/1.1 %d %s\r\n"
+           "Connection: close\r\n"
+           "Content-Type: %s\r\n"
+           "Content-Length: %d\r\n"
+           "\r\n"
+           "%s",
+           response_code, response_code_text, content_type, length, body);
+
+  printf("%s", response);
+}
+
 void start_server(http_server server) {
 
   int client_socket, client_size;
@@ -93,6 +135,7 @@ void start_server(http_server server) {
       return;
     }
 
+    send_response(200, server_buffer, strlen(server_buffer), 0);
     if (send(client_socket, server_buffer, strlen(server_buffer), 0) < 0) {
       printf("Cant send");
       closesocket(client_socket);
