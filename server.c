@@ -5,6 +5,7 @@
 #include <string.h>
 #include <winnt.h>
 #include <winsock2.h>
+#define MAX_RESPONSE_SIZE 1024
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -51,9 +52,8 @@ http_server create_server(int port) {
   return server;
 }
 
-void send_response(int response_code, char *body, int length,
-                   int content_type_code) {
-  char response[1024] = "";
+void create_response(char *response, int response_code, char *body,
+                     int content_type_code) {
   char *response_code_text;
   char *content_type;
 
@@ -81,14 +81,15 @@ void send_response(int response_code, char *body, int length,
     break;
   }
 
-  snprintf(response, 1024,
+  snprintf(response, MAX_RESPONSE_SIZE,
            "HTTP/1.1 %d %s\r\n"
            "Connection: close\r\n"
            "Content-Type: %s\r\n"
            "Content-Length: %d\r\n"
            "\r\n"
            "%s",
-           response_code, response_code_text, content_type, length, body);
+           response_code, response_code_text, content_type, (int)strlen(body),
+           body);
 
   printf("%s", response);
 }
@@ -135,8 +136,10 @@ void start_server(http_server server) {
       return;
     }
 
-    send_response(200, server_buffer, strlen(server_buffer), 0);
-    if (send(client_socket, server_buffer, strlen(server_buffer), 0) < 0) {
+    char response[MAX_RESPONSE_SIZE];
+    create_response(response, 200,
+                    "<html><body><h1>Hello World!</h1></body></html>", 1);
+    if (send(client_socket, response, strlen(response), 0) < 0) {
       printf("Cant send");
       closesocket(client_socket);
       WSACleanup();
