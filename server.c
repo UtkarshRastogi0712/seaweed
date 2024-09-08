@@ -13,6 +13,33 @@ typedef struct http_server {
   int server_socket;
 } http_server;
 
+int send_TCP(int socket, char *buffer, int length) {
+  while (length > 0) {
+    int sent = send(socket, buffer, length, 0);
+    if (sent < 1)
+      return -1;
+    buffer += sent;
+    length -= sent;
+  }
+  return 0;
+}
+
+int recv_TCP(int socket, char *buffer, int length) {
+  while (length > 0) {
+    int received = recv(socket, buffer, length, 0);
+    if (received < 0)
+      return -1;
+    else if (received == 0)
+      return 0;
+    else if (buffer[strlen(buffer) - 1] == '\n' &&
+             buffer[strlen(buffer) - 2] == '\r')
+      return 0;
+    buffer += received;
+    length -= received;
+  }
+  return -1;
+}
+
 int create_server_socket(int port) {
   WSADATA wsa;
   int socket_descriptor;
@@ -90,8 +117,6 @@ void create_response(char *response, int response_code, char *body,
            "%s",
            response_code, response_code_text, content_type, (int)strlen(body),
            body);
-
-  printf("%s", response);
 }
 
 void start_server(http_server *server) {
@@ -121,24 +146,25 @@ void start_server(http_server *server) {
       return;
     }
 
-    if (recv(client_socket, client_buffer, strlen(client_buffer), 0) < 0) {
+    if (recv_TCP(client_socket, client_buffer, MAX_RESPONSE_SIZE) < 0) {
       printf("Cant recieve");
       closesocket(client_socket);
       WSACleanup();
       return;
     }
 
+    printf("Message: %s\n", client_buffer);
+
     char response[MAX_RESPONSE_SIZE];
     create_response(response, 200,
                     "<html><body><h1>Hello World!</h1></body></html>", 1);
-    if (send(client_socket, response, strlen(response), 0) < 0) {
+
+    if (send_TCP(client_socket, response, strlen(response)) < 0) {
       printf("Cant send");
       closesocket(client_socket);
       WSACleanup();
       return;
     }
-
-    printf("Message: %s\n", client_buffer);
   }
 }
 
