@@ -94,32 +94,24 @@ void create_response(char *response, int response_code, char *body,
   printf("%s", response);
 }
 
-void start_server(http_server server) {
+void start_server(http_server *server) {
 
   int client_socket, client_size;
   struct sockaddr_in client_addr;
   char server_buffer[1000], client_buffer[1000];
 
-  memset(server_buffer, '\0', sizeof(server_buffer));
   memset(client_buffer, '\0', sizeof(client_buffer));
 
-  strcpy(server_buffer, "HTTP/1.1 200 OK\r\n"
-                        "Connection: close\r\n"
-                        "Content-Type: text/html\r\n"
-                        "Content-Length: 48\r\n"
-                        "\r\n"
-                        "<html><body><h1>Hello World!</h1></body></html>");
-
-  if (listen(server.server_socket, 1) < 0) {
+  if (listen(server->server_socket, 1) < 0) {
     printf("Error while listening");
-    closesocket(server.server_socket);
+    closesocket(server->server_socket);
     WSACleanup();
     return;
   }
 
   client_size = sizeof(client_addr);
   while (1) {
-    client_socket = accept(server.server_socket,
+    client_socket = accept(server->server_socket,
                            (struct sockaddr *)&client_addr, &client_size);
 
     if (client_socket < 0) {
@@ -159,7 +151,7 @@ int main() {
   http_server app;
 
   app = create_server(3000);
-  start_server(app);
+  start_server(&app);
   close_server(&app);
 
   return 0;
