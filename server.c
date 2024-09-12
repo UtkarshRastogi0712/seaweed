@@ -1,11 +1,14 @@
 #include <WS2tcpip.h>
 #include <Winsock2.h>
 #include <minwindef.h>
+#include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <winnt.h>
 #include <winsock2.h>
-#define MAX_RESPONSE_SIZE 1024
+
+#define MAX_PACKET_SIZE 1024
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -67,7 +70,7 @@ int create_server_socket(int port) {
     printf("Cant bind to a port");
     closesocket(socket_descriptor);
     WSACleanup();
-    return 0;
+    return -1;
   }
 
   return socket_descriptor;
@@ -87,6 +90,9 @@ void create_response(char *response, int response_code, char *body,
   switch (response_code) {
   case 200:
     response_code_text = "OK";
+    break;
+  case 400:
+    response_code_text = "Bad Request";
     break;
   case 404:
     response_code_text = "Not Found";
@@ -108,7 +114,7 @@ void create_response(char *response, int response_code, char *body,
     break;
   }
 
-  snprintf(response, MAX_RESPONSE_SIZE,
+  snprintf(response, MAX_PACKET_SIZE,
            "HTTP/1.1 %d %s\r\n"
            "Connection: close\r\n"
            "Content-Type: %s\r\n"
@@ -121,13 +127,13 @@ void create_response(char *response, int response_code, char *body,
 
 void start_server(http_server *server) {
 
-  int client_socket, client_size;
+  int client_size;
   struct sockaddr_in client_addr;
   char server_buffer[1000], client_buffer[1000];
 
   memset(client_buffer, '\0', sizeof(client_buffer));
 
-  if (listen(server->server_socket, 1) < 0) {
+  if (listen(server->server_socket, 5) < 0) {
     printf("Error while listening");
     closesocket(server->server_socket);
     WSACleanup();
@@ -136,39 +142,40 @@ void start_server(http_server *server) {
 
   client_size = sizeof(client_addr);
   while (1) {
-    client_socket = accept(server->server_socket,
-                           (struct sockaddr *)&client_addr, &client_size);
+    int client_socket;
 
-    if (client_socket < 0) {
-      printf("Cant accept");
+    if ((client_socket =
+             accept(server->server_socket, (struct sockaddr *)&client_addr,
+                    &client_size)) < 0) {
+      wprintf(L"Cant accept%ld\n", WSAGetLastError());
       closesocket(client_socket);
-      WSACleanup();
-      return;
+      continue;
     }
 
-    if (recv_TCP(client_socket, client_buffer, MAX_RESPONSE_SIZE) < 0) {
+    char response[MAX_PACKET_SIZE];
+    if (recv_TCP(client_socket, client_buffer, MAX_PACKET_SIZE) < 0) {
       printf("Cant recieve");
+      create_response(response, 200,
+                      "<html><body><h1>Bad Request!</h1></body></html>", 1);
       closesocket(client_socket);
-      WSACleanup();
-      return;
+      continue;
     }
 
     printf("Message: %s\n", client_buffer);
 
-    char response[MAX_RESPONSE_SIZE];
     create_response(response, 200,
                     "<html><body><h1>Hello World!</h1></body></html>", 1);
 
     if (send_TCP(client_socket, response, strlen(response)) < 0) {
       printf("Cant send");
       closesocket(client_socket);
-      WSACleanup();
-      return;
+      continue;
     }
   }
 }
 
 void close_server(http_server *server) {
+  printf("Closing socket\n");
   closesocket(server->server_socket);
   WSACleanup();
 }
