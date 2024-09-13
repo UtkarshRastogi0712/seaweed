@@ -1,20 +1,32 @@
 #include <WS2tcpip.h>
 #include <Winsock2.h>
 #include <minwindef.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <winnt.h>
 #include <winsock2.h>
 
 #define MAX_PACKET_SIZE 1024
-
 #pragma comment(lib, "ws2_32.lib")
 
 typedef struct http_server {
   int server_socket;
 } http_server;
+
+int pattern_match(char source[MAX_PACKET_SIZE], char pattern[MAX_PACKET_SIZE]) {
+  int source_len = strlen(source);
+  int pattern_len = strlen(pattern);
+  for (int i = 0; i < source_len - pattern_len + 1; i++) {
+    int j = 0;
+    while (source[i + j] == pattern[j] && j < pattern_len) {
+      j += 1;
+      if (j == pattern_len - 1) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
 
 int send_TCP(int socket, char *buffer, int length) {
   while (length > 0) {
