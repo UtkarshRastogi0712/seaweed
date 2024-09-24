@@ -6,14 +6,30 @@
 #include <winnt.h>
 #include <winsock2.h>
 
-#define MAX_PACKET_SIZE 1024
+#define MAX_SIZE 1024
 #pragma comment(lib, "ws2_32.lib")
+
+typedef enum http_requet_type { get, put, post, delete } http_requet_type;
+
+typedef struct http_requet {
+  char url;
+  char headers;
+  char body;
+  http_requet_type requet_type;
+} http_requet;
+
+typedef struct http_endpoint {
+  http_requet_type request_type;
+  char url;
+  void (*endpoint)(http_requet);
+} http_endpoint;
 
 typedef struct http_server {
   int server_socket;
+  http_endpoint endpoints[MAX_SIZE];
 } http_server;
 
-int pattern_match(char source[MAX_PACKET_SIZE], char pattern[MAX_PACKET_SIZE]) {
+int pattern_match(char source[MAX_SIZE], char pattern[MAX_SIZE]) {
   int source_len = strlen(source);
   int pattern_len = strlen(pattern);
   for (int i = 0; i < source_len - pattern_len + 1; i++) {
@@ -126,7 +142,7 @@ void create_response(char *response, int response_code, char *body,
     break;
   }
 
-  snprintf(response, MAX_PACKET_SIZE,
+  snprintf(response, MAX_SIZE,
            "HTTP/1.1 %d %s\r\n"
            "Connection: close\r\n"
            "Content-Type: %s\r\n"
@@ -141,7 +157,7 @@ void start_server(http_server *server) {
 
   int client_size;
   struct sockaddr_in client_addr;
-  char server_buffer[1000], client_buffer[1000];
+  char client_buffer[MAX_SIZE];
 
   memset(client_buffer, '\0', sizeof(client_buffer));
 
@@ -164,8 +180,8 @@ void start_server(http_server *server) {
       continue;
     }
 
-    char response[MAX_PACKET_SIZE];
-    if (recv_TCP(client_socket, client_buffer, MAX_PACKET_SIZE) < 0) {
+    char response[MAX_SIZE];
+    if (recv_TCP(client_socket, client_buffer, MAX_SIZE) < 0) {
       printf("Cant recieve");
       closesocket(client_socket);
       continue;
