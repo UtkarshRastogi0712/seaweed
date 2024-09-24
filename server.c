@@ -20,7 +20,7 @@ int pattern_match(char source[MAX_PACKET_SIZE], char pattern[MAX_PACKET_SIZE]) {
     int j = 0;
     while (source[i + j] == pattern[j] && j < pattern_len) {
       j += 1;
-      if (j == pattern_len - 1) {
+      if (j == pattern_len) {
         return i;
       }
     }
@@ -167,16 +167,19 @@ void start_server(http_server *server) {
     char response[MAX_PACKET_SIZE];
     if (recv_TCP(client_socket, client_buffer, MAX_PACKET_SIZE) < 0) {
       printf("Cant recieve");
-      create_response(response, 200,
-                      "<html><body><h1>Bad Request!</h1></body></html>", 1);
       closesocket(client_socket);
       continue;
     }
 
     printf("Message: %s\n", client_buffer);
 
-    create_response(response, 200,
-                    "<html><body><h1>Hello World!</h1></body></html>", 1);
+    if (pattern_match(client_buffer, "HTTP/1.1") != -1) {
+      create_response(response, 200,
+                      "<html><body><h1>Hello World!</h1></body></html>", 1);
+    } else {
+      create_response(response, 400,
+                      "<html><body><h1>Bad Request </h1></body></html>", 1);
+    }
 
     if (send_TCP(client_socket, response, strlen(response)) < 0) {
       printf("Cant send");
