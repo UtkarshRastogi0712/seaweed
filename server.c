@@ -9,30 +9,30 @@
 #define MAX_SIZE 1024
 #pragma comment(lib, "ws2_32.lib")
 
-typedef enum http_requet_type { get, put, post, delete } http_requet_type;
+typedef enum http_request_type { get, put, post, delete } http_request_type;
 
-typedef struct http_requet {
-  char url;
-  char headers;
-  char body;
-  http_requet_type requet_type;
-} http_requet;
+typedef struct http_request {
+  char url[MAX_SIZE];
+  char headers[MAX_SIZE];
+  char body[MAX_SIZE];
+  http_request_type requet_type;
+} http_request;
 
 typedef struct http_endpoint {
-  http_requet_type request_type;
-  char url;
-  void (*endpoint)(http_requet);
+  http_request_type request_type;
+  char url[MAX_SIZE];
+  void (*endpoint)(http_request);
 } http_endpoint;
 
 typedef struct http_server {
   int server_socket;
-  http_endpoint endpoints[MAX_SIZE];
+  // http_endpoint endpoints[MAX_SIZE];
 } http_server;
 
-int pattern_match(char source[MAX_SIZE], char pattern[MAX_SIZE]) {
+int pattern_match(char *source, char *pattern, int index) {
   int source_len = strlen(source);
   int pattern_len = strlen(pattern);
-  for (int i = 0; i < source_len - pattern_len + 1; i++) {
+  for (int i = index; i < source_len - pattern_len + 1; i++) {
     int j = 0;
     while (source[i + j] == pattern[j] && j < pattern_len) {
       j += 1;
@@ -153,6 +153,26 @@ void create_response(char *response, int response_code, char *body,
            body);
 }
 
+void parse_request(http_request *request, char *client_buffer) {
+  if (pattern_match(client_buffer, "GET", 0) == 0) {
+    request->requet_type = get;
+  } else if (pattern_match(client_buffer, "POST", 0) == 0) {
+    request->requet_type = post;
+  } else if (pattern_match(client_buffer, "PUT", 0) == 0) {
+    request->requet_type = put;
+  } else if (pattern_match(client_buffer, "DELETE", 0) == 0) {
+    request->requet_type = delete;
+  } else {
+    request->requet_type = get;
+  }
+
+  int url_start = pattern_match(client_buffer, " ", 0);
+  int url_end = pattern_match(client_buffer, " ", url_start + 1);
+  snprintf(request->url, url_end - url_start + 1, "%s",
+           client_buffer + url_start);
+  return;
+}
+
 void start_server(http_server *server) {
 
   int client_size;
@@ -189,7 +209,11 @@ void start_server(http_server *server) {
 
     printf("Message: %s\n", client_buffer);
 
-    if (pattern_match(client_buffer, "HTTP/1.1") != -1) {
+    http_request request;
+    parse_request(&request, client_buffer);
+    printf("\n Verb: %d, URL: %s \n", request.requet_type, request.url);
+
+    if (pattern_match(client_buffer, "HTTP/1.1", 0) != -1) {
       create_response(response, 200,
                       "<html><body><h1>Hello World!</h1></body></html>", 1);
     } else {
