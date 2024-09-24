@@ -21,12 +21,13 @@ typedef struct http_request {
 typedef struct http_endpoint {
   http_request_type request_type;
   char url[MAX_SIZE];
-  void (*endpoint)(http_request);
+  void (*endpoint_function)(http_request *);
 } http_endpoint;
 
 typedef struct http_server {
   int server_socket;
   http_endpoint *endpoints[MAX_SIZE];
+  int endpoint_count;
 } http_server;
 
 int pattern_match(char *source, char *pattern, int index) {
@@ -107,6 +108,7 @@ int create_server_socket(int port) {
 http_server create_server(int port) {
   http_server server;
   server.server_socket = create_server_socket(port);
+  server.endpoint_count = 0;
   return server;
 }
 
@@ -168,8 +170,8 @@ void parse_request(http_request *request, char *client_buffer) {
 
   int url_start = pattern_match(client_buffer, " ", 0);
   int url_end = pattern_match(client_buffer, " ", url_start + 1);
-  snprintf(request->url, url_end - url_start + 1, "%s",
-           client_buffer + url_start);
+  snprintf(request->url, url_end - url_start, "%s",
+           client_buffer + url_start + 1);
 
   if (pattern_match(client_buffer, "Content-Length", 0) >= 0) {
     int content_header_start =
@@ -186,6 +188,17 @@ void parse_request(http_request *request, char *client_buffer) {
     snprintf(request->body, 0, "%s", "\0");
   }
   return;
+}
+
+void add_endpoint(http_server *socket, http_request_type request_type,
+                  char *url, void (*endpoint_function)(http_request *)) {
+  http_endpoint *endpoint = malloc(sizeof(http_endpoint));
+  socket->endpoints[socket->endpoint_count] = endpoint;
+  socket->endpoint_count++;
+
+  snprintf(endpoint->url, strlen(url) + 1, "%s", url);
+  endpoint->request_type = request_type;
+  endpoint->endpoint_function = endpoint_function;
 }
 
 void start_server(http_server *server) {
@@ -226,8 +239,15 @@ void start_server(http_server *server) {
 
     http_request *request = malloc(sizeof(http_request));
     parse_request(request, client_buffer);
-    printf("\n Verb: %d, URL: %s , Body: %s\n\n", request->requet_type,
+    printf("\nVerb: %d\nURL: %s\nBody: %s\n\n", request->requet_type,
            request->url, request->body);
+
+    for (int i = 0; i < server->endpoint_count; i++) {
+      if (pattern_match(request->url, server->endpoints[i]->url, 0) == 0 &&
+          strlen(request->url) == strlen(server->endpoints[i]->url)) {
+        server->endpoints[i]->endpoint_function(request);
+      }
+    }
 
     if (pattern_match(client_buffer, "HTTP/1.1", 0) != -1) {
       create_response(response, 200,
@@ -251,10 +271,18 @@ void close_server(http_server *server) {
   WSACleanup();
 }
 
+void test_endpoint(http_request *request) {
+  printf("\n\nEndpoint function hit\n\n");
+  return;
+}
+
 int main() {
   http_server app;
 
   app = create_server(3000);
+
+  add_endpoint(&app, get, "/hello/world", test_endpoint);
+  printf("%d %s", app.endpoint_count, app.endpoints[0]->url);
   start_server(&app);
   close_server(&app);
 
