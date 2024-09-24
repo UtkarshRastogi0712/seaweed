@@ -2,6 +2,7 @@
 #include <Winsock2.h>
 #include <minwindef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <winnt.h>
 #include <winsock2.h>
@@ -13,7 +14,6 @@ typedef enum http_request_type { get, put, post, delete } http_request_type;
 
 typedef struct http_request {
   char url[MAX_SIZE];
-  char headers[MAX_SIZE];
   char body[MAX_SIZE];
   http_request_type requet_type;
 } http_request;
@@ -26,7 +26,7 @@ typedef struct http_endpoint {
 
 typedef struct http_server {
   int server_socket;
-  // http_endpoint endpoints[MAX_SIZE];
+  http_endpoint *endpoints[MAX_SIZE];
 } http_server;
 
 int pattern_match(char *source, char *pattern, int index) {
@@ -170,6 +170,21 @@ void parse_request(http_request *request, char *client_buffer) {
   int url_end = pattern_match(client_buffer, " ", url_start + 1);
   snprintf(request->url, url_end - url_start + 1, "%s",
            client_buffer + url_start);
+
+  if (pattern_match(client_buffer, "Content-Length", 0) >= 0) {
+    int content_header_start =
+        pattern_match(client_buffer, "Content-Length", 0);
+    int content_header_end =
+        pattern_match(client_buffer, "\r\n", content_header_start);
+    char *end = client_buffer + content_header_end - 1;
+    int content_length =
+        strtol(client_buffer + content_header_start + 15, &end, 10);
+
+    snprintf(request->body, content_length + 3, "%s",
+             client_buffer + content_header_end + 2);
+  } else {
+    snprintf(request->body, 0, "%s", "\0");
+  }
   return;
 }
 
@@ -209,9 +224,10 @@ void start_server(http_server *server) {
 
     printf("Message: %s\n", client_buffer);
 
-    http_request request;
-    parse_request(&request, client_buffer);
-    printf("\n Verb: %d, URL: %s \n", request.requet_type, request.url);
+    http_request *request = malloc(sizeof(http_request));
+    parse_request(request, client_buffer);
+    printf("\n Verb: %d, URL: %s , Body: %s\n\n", request->requet_type,
+           request->url, request->body);
 
     if (pattern_match(client_buffer, "HTTP/1.1", 0) != -1) {
       create_response(response, 200,
