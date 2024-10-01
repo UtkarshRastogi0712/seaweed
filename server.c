@@ -18,10 +18,16 @@ typedef struct http_request {
   http_request_type requet_type;
 } http_request;
 
+typedef struct http_response {
+  int response_code;
+  char body[MAX_SIZE];
+  int content_type_code;
+} http_response;
+
 typedef struct http_endpoint {
   http_request_type request_type;
   char url[MAX_SIZE];
-  void (*endpoint_function)(http_request *);
+  void (*endpoint_function)(http_request *, http_response *);
 } http_endpoint;
 
 typedef struct http_server {
@@ -63,8 +69,7 @@ int recv_TCP(int socket, char *buffer, int length) {
       return -1;
     else if (received == 0)
       return 0;
-    else if (buffer[strlen(buffer) - 1] == '\n' &&
-             buffer[strlen(buffer) - 2] == '\r')
+    else if (pattern_match(buffer, "\r\n\r\n", 0) >= 0)
       return 0;
     buffer += received;
     length -= received;
@@ -112,12 +117,11 @@ http_server create_server(int port) {
   return server;
 }
 
-void create_response(char *response, int response_code, char *body,
-                     int content_type_code) {
+void create_response(char *response_string, http_response *response) {
   char *response_code_text;
   char *content_type;
 
-  switch (response_code) {
+  switch (response->response_code) {
   case 200:
     response_code_text = "OK";
     break;
@@ -132,7 +136,7 @@ void create_response(char *response, int response_code, char *body,
     break;
   }
 
-  switch (content_type_code) {
+  switch (response->content_type_code) {
   case 0:
     content_type = "text/plain";
     break;
@@ -144,15 +148,15 @@ void create_response(char *response, int response_code, char *body,
     break;
   }
 
-  snprintf(response, MAX_SIZE,
+  snprintf(response_string, MAX_SIZE,
            "HTTP/1.1 %d %s\r\n"
            "Connection: close\r\n"
            "Content-Type: %s\r\n"
            "Content-Length: %d\r\n"
            "\r\n"
            "%s",
-           response_code, response_code_text, content_type, (int)strlen(body),
-           body);
+           response->response_code, response_code_text, content_type,
+           (int)strlen(response->body), response->body);
 }
 
 void parse_request(http_request *request, char *client_buffer) {
@@ -174,16 +178,11 @@ void parse_request(http_request *request, char *client_buffer) {
            client_buffer + url_start + 1);
 
   if (pattern_match(client_buffer, "Content-Length", 0) >= 0) {
-    int content_header_start =
-        pattern_match(client_buffer, "Content-Length", 0);
-    int content_header_end =
-        pattern_match(client_buffer, "\r\n", content_header_start);
-    char *end = client_buffer + content_header_end - 1;
-    int content_length =
-        strtol(client_buffer + content_header_start + 15, &end, 10);
-
-    snprintf(request->body, content_length + 3, "%s",
-             client_buffer + content_header_end + 2);
+    int content_header = pattern_match(client_buffer, "Content-Length", 0);
+    int body_start =
+        pattern_match(client_buffer, "\r\n\r\n", content_header) + 4;
+    snprintf(request->body, strlen(client_buffer) - body_start + 1, "%s",
+             client_buffer + body_start);
   } else {
     snprintf(request->body, 0, "%s", "\0");
   }
@@ -191,7 +190,8 @@ void parse_request(http_request *request, char *client_buffer) {
 }
 
 void add_endpoint(http_server *socket, http_request_type request_type,
-                  char *url, void (*endpoint_function)(http_request *)) {
+                  char *url,
+                  void (*endpoint_function)(http_request *, http_response *)) {
   http_endpoint *endpoint = malloc(sizeof(http_endpoint));
   socket->endpoints[socket->endpoint_count] = endpoint;
   socket->endpoint_count++;
@@ -219,6 +219,7 @@ void start_server(http_server *server) {
   client_size = sizeof(client_addr);
   while (1) {
     int client_socket;
+    memset(client_buffer, '\0', sizeof(client_buffer));
 
     if ((client_socket =
              accept(server->server_socket, (struct sockaddr *)&client_addr,
@@ -228,40 +229,54 @@ void start_server(http_server *server) {
       continue;
     }
 
-    char response[MAX_SIZE];
+    char response_string[MAX_SIZE];
     if (recv_TCP(client_socket, client_buffer, MAX_SIZE) < 0) {
       printf("Cant recieve");
       closesocket(client_socket);
       continue;
     }
 
-    printf("Message: %s\n", client_buffer);
-
-    http_request *request = malloc(sizeof(http_request));
-    parse_request(request, client_buffer);
-    printf("\nVerb: %d\nURL: %s\nBody: %s\n\n", request->requet_type,
-           request->url, request->body);
-
-    for (int i = 0; i < server->endpoint_count; i++) {
-      if (pattern_match(request->url, server->endpoints[i]->url, 0) == 0 &&
-          strlen(request->url) == strlen(server->endpoints[i]->url)) {
-        server->endpoints[i]->endpoint_function(request);
-      }
-    }
-
     if (pattern_match(client_buffer, "HTTP/1.1", 0) != -1) {
-      create_response(response, 200,
-                      "<html><body><h1>Hello World!</h1></body></html>", 1);
+      http_request *request = malloc(sizeof(http_request));
+      parse_request(request, client_buffer);
+      printf("\nVerb: %d\nURL: %s\nBody:\n %s\n\n", request->requet_type,
+             request->url, request->body);
+
+      int flag = 0;
+
+      for (int i = 0; i < server->endpoint_count; i++) {
+        if (pattern_match(request->url, server->endpoints[i]->url, 0) == 0 &&
+            strlen(request->url) == strlen(server->endpoints[i]->url) &&
+            server->endpoints[i]->request_type == request->requet_type) {
+          http_response *response = malloc(sizeof(http_response));
+          server->endpoints[i]->endpoint_function(request, response);
+          create_response(response_string, response);
+          flag++;
+          break;
+        }
+      }
+      if (flag == 0) {
+        http_response *response = malloc(sizeof(http_response));
+        response->response_code = 404;
+        response->content_type_code = 1;
+        char response_body[] =
+            "<html><head><title>Not Found</title></head><body><h1>404:Not "
+            "Found</h1></body></html>";
+        snprintf(response->body, strlen(response_body), "%s", response_body);
+        create_response(response_string, response);
+      }
     } else {
-      create_response(response, 400,
-                      "<html><body><h1>Bad Request </h1></body></html>", 1);
+      printf("Not an http request");
+      closesocket(client_socket);
+      continue;
     }
 
-    if (send_TCP(client_socket, response, strlen(response)) < 0) {
+    if (send_TCP(client_socket, response_string, strlen(response_string)) < 0) {
       printf("Cant send");
       closesocket(client_socket);
       continue;
     }
+    printf("----------------------------------");
   }
 }
 
@@ -271,8 +286,13 @@ void close_server(http_server *server) {
   WSACleanup();
 }
 
-void test_endpoint(http_request *request) {
-  printf("\n\nEndpoint function hit\n\n");
+void test_endpoint(http_request *request, http_response *response) {
+  response->response_code = 200;
+  response->content_type_code = 1;
+  char response_body[] =
+      "<html><head><title>Endpoint</title></head><body><h1>Hello "
+      "World from endpoint</h1></body></html>";
+  snprintf(response->body, strlen(response_body), "%s", response_body);
   return;
 }
 
@@ -282,7 +302,6 @@ int main() {
   app = create_server(3000);
 
   add_endpoint(&app, get, "/hello/world", test_endpoint);
-  printf("%d %s", app.endpoint_count, app.endpoints[0]->url);
   start_server(&app);
   close_server(&app);
 
